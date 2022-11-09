@@ -32,7 +32,12 @@
 </template>
 
 <script>
-import {ref, watch} from 'vue'
+import {ref, watch, onMounted} from 'vue'
+import appConfig from '@/config/app'
+// import {KEY_IS_GAME_OVER, KEY_TURN, KEY_BOARD, KEY_PLACED, set, get} from './../local_storage'
+import {writeSessionData, onSessionData} from '@/firebase'
+import { v4 as uuidv4 } from 'uuid';
+import { useRoute, useRouter } from 'vue-router';
 
 export default {
   name: 'HomeView',
@@ -43,23 +48,41 @@ export default {
     const CROSS = 'cross'
     const NAUGHT = 'naught'
     const turn = ref(CROSS)
-    const isGameOver = ref(undefined)
+    const isGameOver = ref('')
     const board = ref([])
     const placed = ref(0)
+    const mounted = ref(false)
 
-    const M = 8
-    const N = 8
-    const K = 5
-    const SCAN_DIRECTION_OPERATOR = [
-      {'column': 0, 'row': -1}, // North
-      {'column': 1, 'row': -1}, // North East
-      {'column': 1, 'row': 0}, // East
-      {'column': 1, 'row': 1}, // South East
-      {'column': 0, 'row': 1}, // South
-      {'column': -1, 'row': 1}, // South West
-      {'column': -1, 'row': 0}, // West
-      {'column': -1, 'row': -1}, // North West
-    ]
+    const M = appConfig.M
+    const N = appConfig.N
+    const K = appConfig.K
+    const SCAN_DIRECTION_OPERATOR = appConfig.SCAN_DIRECTION_OPERATOR
+
+    const route = useRoute();
+    const router = useRouter()
+    
+    // Prepare board
+    for (var i = 1; i <= M; i++) {
+      var column = []
+      for (var j = 1; j <= N; j++) {
+        column.push({
+          'column': i,
+          'row': j,
+          'occupied': null
+        })
+      }
+      board.value.push(column)
+    }
+
+    var session = route.query.session;
+    if (!session) {
+      const sid = uuidv4()
+      session = sid
+      router.push({query: {...{'session': sid}}})
+
+      // Update to database
+      writeSessionData(session, turn.value, isGameOver.value, board.value, placed.value)
+    }
     
     const place = (cell) => {
       if (!isGameOver.value && !cell['occupied']) {
@@ -69,10 +92,26 @@ export default {
       }
     }
 
+    onSessionData(session, (snapshot) => {
+      const data = snapshot.val()
+      turn.value = data.turn
+      isGameOver.value = data.isGameOver
+      board.value = data.board
+      placed.value = data.placed
+    })
+    
+    onMounted (() => {
+      mounted.value = true
+    })
+
     watch(board, (state) => {
-      console.log(placed.value)
-      if (placed.value < 9) { return }
-      
+      // No execution before mounted
+      if (!mounted.value) { return } 
+
+      // Update to database
+      writeSessionData(session, turn.value, isGameOver.value, board.value, placed.value)
+
+      if (placed.value < (K * 2 - 1)) { return }
       // scanning direction started with north
       state.forEach(col => {
         col.forEach(cell => {
@@ -92,25 +131,16 @@ export default {
 
             if (point === K) {
               isGameOver.value = winTurn
+
+              // Update to database
+              writeSessionData(session, turn.value, isGameOver.value, board.value, placed.value)
+
               return
             }
           })
         })
       });
     }, {deep: true})
-    
-    
-    for (var i = 1; i <= M; i++) {
-      var column = []
-      for (var j = 1; j <= N; j++) {
-        column.push({
-          'column': i,
-          'row': j,
-          'occupied': undefined
-        })
-      }
-      board.value.push(column)
-    }
 
     return {
       // Value
