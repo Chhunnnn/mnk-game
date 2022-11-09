@@ -19,6 +19,8 @@
               :class="{cross: cell.occupied === 'cross', naught: cell.occupied === 'naught'}"
               v-for="(cell, key) in col" :key="key"
               @click="place(cell)">
+              <img v-if="cell.occupied === 'cross'" src="./../assets/cross.png" alt="cross"/>
+              <img v-if="cell.occupied === 'naught'" src="./../assets/naught.png" alt="naught"/>
           </div>
         </div>
       </div>
@@ -63,11 +65,12 @@ export default {
       if (!isGameOver.value && !cell['occupied']) {
         cell['occupied'] = turn.value === CROSS ? NAUGHT : CROSS
         turn.value = turn.value === CROSS ? NAUGHT : CROSS
-        placed.value =+ 1
+        placed.value++
       }
     }
 
     watch(board, (state) => {
+      console.log(placed.value)
       if (placed.value < 9) { return }
       
       // scanning direction started with north
@@ -142,22 +145,25 @@ export default {
 }
 
 .box {
-  padding: 20px;
+  /* padding: 20px; */
   font-size: 150%;
   /* background-color: #b5915f; */
-  height: 20px;
+  height: 68px;
+  width: 68px;
   background-color: #ffffff;
   border: 1px solid black;
   color: #000;
   text-align: center;
 }
 
-.cross {
-  background-color: red;
+.cross img {
+  width: 68px;
+  height: 68px;
 }
 
-.naught {
-  background-color: green;
+.naught img {
+  width: 68px;
+  height: 68px;
 }
 
 .box-inner{
