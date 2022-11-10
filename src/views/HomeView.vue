@@ -1,5 +1,13 @@
 <template>
   <div class="home">
+    <div id="loading" v-if="loading">
+      <img
+        class="loading_img"
+        src="./../assets/loading.gif"
+        alt="loading..."
+        width="200"
+      />
+    </div>
     <div class="container">
       <div class="wrapper">
         <div class="top">
@@ -27,6 +35,9 @@
       <p v-if="isGameOver">
         GAME OVER! '{{ isGameOver }}' wins.
       </p>
+      <a :href="crossSessionLink">Cross Link</a>
+      <br>
+      <a :href="naughtSessionLink">Naught Link</a>
     </div>
   </div>
 </template>
@@ -34,9 +45,8 @@
 <script>
 import {ref, watch, onMounted} from 'vue'
 import appConfig from '@/config/app'
-// import {KEY_IS_GAME_OVER, KEY_TURN, KEY_BOARD, KEY_PLACED, set, get} from './../local_storage'
-import {writeSessionData, onSessionData} from '@/firebase'
-import { v4 as uuidv4 } from 'uuid';
+import {writeSessionData, updateSessionData, onSessionData, getTurnSessionData} from '@/firebase'
+import {generateNewSession} from '@/session'
 import { useRoute, useRouter } from 'vue-router';
 
 export default {
@@ -45,6 +55,14 @@ export default {
     // HelloWorld
   },
   setup() {
+    const route = useRoute()
+    const router = useRouter()
+
+    const M = appConfig.M
+    const N = appConfig.N
+    const K = appConfig.K
+    const SCAN_DIRECTION_OPERATOR = appConfig.SCAN_DIRECTION_OPERATOR
+
     const CROSS = 'cross'
     const NAUGHT = 'naught'
     const turn = ref(CROSS)
@@ -52,14 +70,12 @@ export default {
     const board = ref([])
     const placed = ref(0)
     const mounted = ref(false)
+    const turnSession = ref('')
+    const session = ref('')
+    const loading = ref(true)
 
-    const M = appConfig.M
-    const N = appConfig.N
-    const K = appConfig.K
-    const SCAN_DIRECTION_OPERATOR = appConfig.SCAN_DIRECTION_OPERATOR
-
-    const route = useRoute();
-    const router = useRouter()
+    const crossSessionLink = ref('')
+    const naughtSessionLink = ref('')
     
     // Prepare board
     for (var i = 1; i <= M; i++) {
@@ -74,34 +90,74 @@ export default {
       board.value.push(column)
     }
 
-    var session = route.query.session;
-    if (!session) {
-      const sid = uuidv4()
-      session = sid
-      router.push({query: {...{'session': sid}}})
+    const generateSessionLink = (session, turnSession) => {
+      return `${window.location.origin}?session=${session}&turn=${turnSession}`
+    }
+
+    const prepareNewSession = () => {
+      var newSession = generateNewSession()
+
+      session.value = newSession['session']
+      turnSession.value = CROSS
+
+      crossSessionLink.value = generateSessionLink(newSession['session'], newSession['crossSession'])
+      naughtSessionLink.value = generateSessionLink(newSession['session'], newSession['naughtSession'])
 
       // Update to database
-      writeSessionData(session, turn.value, isGameOver.value, board.value, placed.value)
+      writeSessionData(session.value, turn.value, isGameOver.value, board.value, placed.value, newSession['crossSession'], newSession['naughtSession'])
+
+      router.push({query: {...{'session': newSession['session'], 'turn': newSession['crossSession']}}})
+    }
+
+    var sessionQuery = route.query.session
+    var turnQuery = route.query.turn
+
+    if (!sessionQuery || !turnQuery) {
+      prepareNewSession()
+    } else {
+      session.value = sessionQuery
+      getTurnSessionData(sessionQuery, turnQuery)
+        .then((snapshot) => {
+          if (snapshot.exists()) { turnSession.value = snapshot.val() }
+          else { prepareNewSession() }
+
+          onSessionData(session.value, (snapshot) => {
+            const data = snapshot.val()
+            turn.value = data.turn
+            isGameOver.value = data.isGameOver
+            board.value = data.board
+            placed.value = data.placed
+            crossSessionLink.value = generateSessionLink(session.value, data.cross)
+            naughtSessionLink.value = generateSessionLink(session.value, data.naught)
+
+          }, {onlyOnce: true})
+        })
+        .catch(() => {
+          prepareNewSession()
+        });
     }
     
     const place = (cell) => {
-      if (!isGameOver.value && !cell['occupied']) {
+      if (!isGameOver.value && !cell['occupied'] && turnSession.value === turn.value) {
         cell['occupied'] = turn.value === CROSS ? NAUGHT : CROSS
         turn.value = turn.value === CROSS ? NAUGHT : CROSS
         placed.value++
       }
     }
 
-    onSessionData(session, (snapshot) => {
+    onSessionData(session.value, (snapshot) => {
       const data = snapshot.val()
       turn.value = data.turn
       isGameOver.value = data.isGameOver
       board.value = data.board
       placed.value = data.placed
+      crossSessionLink.value = generateSessionLink(session.value, data.cross)
+      naughtSessionLink.value = generateSessionLink(session.value, data.naught)
     })
     
     onMounted (() => {
       mounted.value = true
+      loading.value = false
     })
 
     watch(board, (state) => {
@@ -109,7 +165,7 @@ export default {
       if (!mounted.value) { return } 
 
       // Update to database
-      writeSessionData(session, turn.value, isGameOver.value, board.value, placed.value)
+      updateSessionData(session.value, turn.value, isGameOver.value, board.value, placed.value)
 
       if (placed.value < (K * 2 - 1)) { return }
       // scanning direction started with north
@@ -133,7 +189,7 @@ export default {
               isGameOver.value = winTurn
 
               // Update to database
-              writeSessionData(session, turn.value, isGameOver.value, board.value, placed.value)
+              updateSessionData(session.value, turn.value, isGameOver.value, board.value, placed.value)
 
               return
             }
@@ -146,6 +202,9 @@ export default {
       // Value
       board,
       isGameOver,
+      loading,
+      crossSessionLink,
+      naughtSessionLink,
       
       // Functions
       place,
@@ -217,5 +276,20 @@ export default {
   grid-column-end: 9;
   grid-row-start: 10;
   grid-row-end: 10;
+}
+
+#loading {
+  position: absolute;
+  z-index: 1000;
+  background-color: white;
+  height: 100vh;
+  width: 100vw;
+  text-align: center;
+  line-height: 100vh;
+}
+.loading_img {
+  position: relative;
+  margin: auto;
+  margin-top: 20%;
 }
 </style>
