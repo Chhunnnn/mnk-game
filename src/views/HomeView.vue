@@ -139,8 +139,8 @@ export default {
     
     const place = (cell) => {
       if (!isGameOver.value && !cell['occupied'] && turnSession.value === turn.value) {
-        cell['occupied'] = turn.value === CROSS ? NAUGHT : CROSS
-        turn.value = turn.value === CROSS ? NAUGHT : CROSS
+        cell['occupied'] = turn.value === CROSS ? CROSS : NAUGHT
+        turn.value = turn.value === CROSS ? CROSS : NAUGHT
         placed.value++
       }
     }
