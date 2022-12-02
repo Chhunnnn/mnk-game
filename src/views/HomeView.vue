@@ -139,8 +139,8 @@ export default {
     
     const place = (cell) => {
       if (!isGameOver.value && !cell['occupied'] && turnSession.value === turn.value) {
-        cell['occupied'] = turn.value === CROSS ? CROSS : NAUGHT
-        turn.value = turn.value === CROSS ? CROSS : NAUGHT
+        cell['occupied'] = turn.value === CROSS ? CROSS : NAUGHT 
+        turn.value = turn.value === CROSS ? NAUGHT : CROSS
         placed.value++
       }
     }
@@ -215,13 +215,17 @@ export default {
 </script>
 
 <style>
+html {
+  width: 1750px;
+}
+
 .wrapper {
-  width: 560px;
+  width: 1750px;
   margin: 0 auto;
   display: grid;
   grid-gap: 0;
-  grid-template-columns: repeat(8, 70px);
-  grid-template-rows: 40px repeat(8, 70px) 40px;
+  grid-template-columns: repeat(25, 70px);
+  grid-template-rows: 40px repeat(25, 70px) 40px;
   grid-auto-flow: row;
 }
 .wrapper-inner{
@@ -267,7 +271,7 @@ export default {
 }
 .top {
   grid-column-start: 1;
-  grid-column-end: 9;
+  grid-column-end: 26;
   grid-row-start: 1;
   grid-row-end: 1;
 }
